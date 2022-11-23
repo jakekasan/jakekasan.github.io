@@ -1,8 +1,6 @@
 title: Jake's Site
 description: >- # this means to ignore newlines until "baseurl:"
-  I'm Jake, this is my blog. I'm a Data Engineer, primary working
-  with pyspark (https://spark.apache.org) but I dabble in web stuff
-  from time to time.
+  I'm Jake, this is my blog. I'm a Data Engineer.
 baseurl: "" # the subpath of your site, e.g. /blog
 url: "" # the base hostname & protocol for your site, e.g. http://example.com
 # twitter_username: jekyllrb
