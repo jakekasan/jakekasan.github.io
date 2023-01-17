@@ -12,8 +12,8 @@ The main benefit of following domain driven design is the fact that, if done wel
 ## Example A
 
 ```python
-Product = Literal["Banana"] | Literal["Apple"]
-DateRange = namedtuple("DateRange", "start end")
+Product = ...
+DateRange = ...
 Field = str
 
 @dataclass
@@ -60,7 +60,7 @@ def filter_between_dates(
     return df.loc[df[field_name].between(start_date, end_date, start_inclusive, end_inclusive)]
 ```
 
-We have to ask ourselves, is this a worthwhile abstraction? If we're doing things properly, we should have tests for all the usecases that this function covers. So that means:
+We have to ask ourselves, is this a worthwhile abstraction? If we're doing things properly, we should have tests for all the use-cases that this function covers. So that means:
 - Test for no start date inclusive
 - Test for no start date exclusive
 - Test for no end date inclusive
@@ -69,3 +69,31 @@ We have to ask ourselves, is this a worthwhile abstraction? If we're doing thing
 - Test for start and end exclusive
 - Test for field name which isn't in the dataframe (should we raise our own exception? Or let Pandas's bubble up?)
 - Test for no date value (err... why would we want to do this?)
+
+The arguments for this function also don't make much sense because they are separate. If there is no `end_date` argument, then the `end_inclusive` argument is pointless, but it still needs to be provided.
+
+The four separate arguments are together defining one concept, which can be better expressed with the following code:
+
+```python
+
+@dataclass
+class DateBound:
+    value: date
+    inclusive: bool
+
+@dataclass
+class DateRange:
+    start: DateBound | None
+    end: DateBound | None
+```
+
+The function signature can now be changed to:
+
+```python
+def filter_between_dates(
+    df: pd.DataFrame,
+    date_range: DateRange,
+    field_name: str
+    ) -> pd.DataFrame:
+    ...
+```
