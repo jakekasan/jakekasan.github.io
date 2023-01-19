@@ -7,21 +7,22 @@ title: "Domain Driven Design in Data"
 One of the most valuable concepts I think a developer can learn is domain driven design, particularly for a mid to large sized projects.
 
 # The why
-The main benefit of following domain driven design is the fact that, if done well, the business logic becomes self documenting. Consider the two examples:
+The main benefit of following domain driven design is the fact that, if done well, the business logic becomes self documenting and becomes easier for people unfamiliar with a codebase to understand what it is trying to do. Consider the two examples:
 
 ## Example A
 
 ```python
 Product = ...
 DateRange = ...
-Field = str
+Field = ...
+Aggregation = ...
 
 @dataclass
 class SalesReport:
-    target_products: set[Product]
+    products: set[Product]
     date_range: DateRange
-    group_by: set[Field]
-    aggregations: ...
+    factors: set[Field]
+    aggregations: dict[str, Aggregation]
 
 def generate_report(report: SalesReport):
     ...
@@ -31,22 +32,31 @@ def generate_report(report: SalesReport):
 
 ```python
 
-def load_some_data(path) -> pd.DataFrame:
+def load_some_data() -> pd.DataFrame:
     ...
 
-def filter_on_date(df: pd.DataFrame, start_date: date, end_date: date) -> pd.DataFrame:
+def filter_where_contains(df: pd.DataFrame, field: str, values: list[str]) -> pd.DataFrame:
     ...
 
-def select_products(df: pd.DataFrame, products: set[Field]) -> pd.DataFrame:
+def filter_between_dates(df: pd.DataFrame, start: date, end: date, start_inclusive: bool, end_inclusive: bool, field_name: str) -> pd.DataFrame:
     ...
 
-def filter_between_dates(df: pd.DataFrame, start: date, end: date) -> pd.DataFrame:
+def group_by_fields(df: pd.DataFrame, fields: list[str]) -> pd.DataFrame:
+    ...
+
+def save_results(df: pd.DataFrame) -> None:
     ...
 ```
 
-Let's say the two approaches do the same thing. Example A is a lot clearer on the intent and how the various bits of information relate to each other. Example B is arguably just organising the use of an external API - the business logic is dependent on an external library.
+Let's see what we can learn from just looking at the code. Example A has a class called `SalesReport`, which has a member called `products`, which is a set of some `Product` object. It also has a member called `date_range` which is a `DateRange` object, a member called `factors` which is a set of `Field` types and a member called `aggregations` which is a dictionary with `str` keys and value of type `Aggregate`. I've deliberately left the implementations blank.
 
-Some might argue that example B might be more "reusable", but I would argue that they are just really weak abstractions over the Pandas API. In a lot of cases, the examples are far too simple to be reusable in their current form. Take `filter_between_dates`, for example. Immediately, we can think of several ways that this function isn't quite good enough for reuse. Are the dates inclusive or exclusive? What if we want to just the one side of the comparison (either before the end date _or_ after the start date)? We also should be passing in the name of the field that contains the date information. The final implementation would probably look something like this:
+Even without knowing what the custom objects like `Product` or `DateRange` are, it's pretty clear what this code is about. The class is called `SalesReport`, so it concerns some reporting of sales data. Given the member `products`, the report must be limited to specific products, which are represented by this `Product` class. The `DateRange` object must describe some period of time, judging by it's name, while the factors must be some aspects of the sales data that we are looking at. Finally the `aggregations` member is a dictionary, and judging by it's name it is some collected statistic based on the factors. We might not know _how_ the individual objects have been implemented, but just from their names and the fact that they all belong to this `SalesReport` class, we can get a pretty good idea about what this code is used for.
+
+Contrast that with example B. It obviously deals with Pandas dataframes. It obviously has some notion about loading data into a Pandas dataframe. It can filter this dataframe between two dates, filter where a field contains a certain value, save the results. But why is it doing that? What is the goal?
+
+The intent isn't clear. We know _how_ the code is doing something, but not _what_ it is doing. It's just a showcase of Pandas functionality.
+
+Putting some thought into our domain also helps to tidy up our code. Take `filter_between_dates`, for example. It contains arguments for both the start date, end date and then whether the start and end dates are inclusive. Both start and end are optional. The problem that you might spot here is that `start_inclusive` and `end_inclusive` are meaningless if either `start_date` or `end_date` haven't been passed in. Consider the below:
 
 ```python
 def filter_between_dates(
@@ -60,19 +70,7 @@ def filter_between_dates(
     return df.loc[df[field_name].between(start_date, end_date, start_inclusive, end_inclusive)]
 ```
 
-We have to ask ourselves, is this a worthwhile abstraction? If we're doing things properly, we should have tests for all the use-cases that this function covers. So that means:
-- Test for no start date inclusive
-- Test for no start date exclusive
-- Test for no end date inclusive
-- Test for no end date exclusive
-- Test for start and end inclusive
-- Test for start and end exclusive
-- Test for field name which isn't in the dataframe (should we raise our own exception? Or let Pandas's bubble up?)
-- Test for no date value (err... why would we want to do this?)
-
-The arguments for this function also don't make much sense because they are separate. If there is no `end_date` argument, then the `end_inclusive` argument is pointless, but it still needs to be provided.
-
-The four separate arguments are together defining one concept, which can be better expressed with the following code:
+Compare that to this:
 
 ```python
 
@@ -87,7 +85,7 @@ class DateRange:
     end: DateBound | None
 ```
 
-The function signature can now be changed to:
+Here, we've made it clear that the `inclusive` aspect of the date `start` and `end` is tied to those member being non-null. No start date? No `start_inclusive`. This means that we can rewrite the function signature to the following:
 
 ```python
 def filter_between_dates(
@@ -97,3 +95,5 @@ def filter_between_dates(
     ) -> pd.DataFrame:
     ...
 ```
+
+Instead of someone having to reason about 4 separate arguments, it's just one. If they want to focus on the implementation of the `DateRange` object, it's there, but the details are compartmentalised and don't litter some other bit of code.
